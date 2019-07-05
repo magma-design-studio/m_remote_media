@@ -1,0 +1,216 @@
+<?php
+/*
+Plugin Name:  Remote Media
+Plugin URI:   https://magmadesignstudio.de
+Description:  This plugin loads uploads from a remote server (such as a production environment) on demand, so you do not necessarily have to load all the files of the uploads folder.
+Version:      0.0.1
+Author:       magma, Sebastian Tiede
+Author URI:   https://magmadesignstudio.de
+*/
+
+defined( 'ABSPATH' ) or die( 'No script kiddies please!' );
+
+define( 'PLUGIN_NAME_SLUG', 'm_remote_media' );
+
+define( 'MREMMED_VERSION', '0.0.1' );
+define( 'MREMMED__MINIMUM_WP_VERSION', '4.0' );
+define( 'MREMMED__PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+define( 'MREMMED__PLUGIN_DIR_URL', plugin_dir_url( __FILE__ ) );
+
+class m_remote_media {
+    function initialize() {        
+        add_action('generate_rewrite_rules', array($this, 'add_htaccess_rules'));
+        add_action('init', array($this, 'media_content'));
+        
+        add_action( 'admin_menu', array($this, 'admin_options' ));
+    }
+    
+    public static function set_version() {
+        update_option('m_remote_media_version', MREMMED_VERSION, false);
+    }
+    
+    function admin_options() {
+        add_options_page( 
+            'Remote Media Settings',
+            'Remote Media',
+            'manage_options',
+            __FILE__, //'m_remote_media_settings',
+            array($this, 'admin_options_page')
+        );    
+        
+        add_action( 'admin_init', array($this, 'register_m_remote_media_settings') );
+        
+    }
+    
+    function register_m_remote_media_settings() {
+        register_setting( 'm_remote_media_settings_basics', 'm_remote_media_remote_url' );
+        register_setting( 'm_remote_media_settings_basics', 'm_remote_media_ignore_local' );
+    }
+    
+    function admin_options_page() {
+        
+    
+        ?>
+        <div class="wrap">
+            <h1>Remote Media Settings</h1>
+            <form method="post" action="options.php">
+                <?php settings_fields( 'm_remote_media_settings_basics' ); ?>
+                <?php do_settings_sections( 'm_remote_media_settings_basics' ); ?>
+
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="m_remote_media_remote_url">Remote website address (URL)</label>
+                        </th>
+                        <td>
+                            <input name="m_remote_media_remote_url" type="url" id="m_remote_media_remote_url" value="<?php echo esc_attr( get_option('m_remote_media_remote_url') ); ?>" class="regular-text code" placeholder="https://example.com" />
+                            <p class="description">Entfernte Website-URL</p>
+                        </td>
+                    </tr> 
+                    <tr>
+                        <th scope="row">
+                            <label for="m_remote_media_ignore_local">Ignore local files</label>
+                        </th>
+                        <td>
+                            <input name="m_remote_media_ignore_local" type="checkbox" id="m_remote_media_ignore_local"<?php if(get_option('m_remote_media_ignore_local') == 'on') : ?> checked<?php endif; ?> />
+                        </td>
+                    </tr>                                    
+                </table>
+                <?php submit_button(); ?>
+            </form>
+        </div>
+        <?php
+    }
+    
+    public static function get_home_root() {
+		$home_root = parse_url( home_url() );
+		if ( isset( $home_root['path'] ) ) {
+			return trailingslashit( $home_root['path'] );
+		} else {
+			return '/';
+		}  
+		
+		return $home_root;       
+    }
+    
+    public static function add_htaccess_rules() {
+        //save_mod_rewrite_rules();
+        $home_path     = ABSPATH;
+        $htaccess_file = $home_path . '.htaccess';       
+        
+		$home_root = self::get_home_root();     
+        
+        $insertion = "
+            <IfModule mod_rewrite.c>
+                RewriteEngine On
+                RewriteBase {$home_root}
+                RewriteRule ^wp-content/uploads/(.*)$ /index.php?m_remote_media=true
+            </IfModule>
+        ";
+        
+        if(extract_from_markers($htaccess_file, 'm_remote_media')) {
+            //insert_with_markers( $htaccess_file, 'm_remote_media', $insertion );           
+        } else {
+            $insertion = sprintf(
+                "
+                # BEGIN m_remote_media
+                %s
+                # END m_remote_media
+                ", 
+                $insertion
+            );
+            $insertion .= file_get_contents($htaccess_file);
+            
+            file_put_contents($htaccess_file, $insertion);
+        }
+    
+    }    
+    
+    public static function remove_htaccess_rules() {
+
+        $home_path     = ABSPATH;
+        $htaccess_file = $home_path . '.htaccess';    
+                
+        $htaccess_content = file_get_contents($htaccess_file);
+        
+        $htaccess_content = preg_replace('/# BEGIN m_remote_media(.*)# END m_remote_media/is', null, $htaccess_content);   
+                
+        file_put_contents($htaccess_file, $htaccess_content);
+    }
+    
+    
+    function media_content() {
+        if(empty($_GET['m_remote_media'])) {
+            return;
+        }
+        $request = $_SERVER['REQUEST_URI'];
+
+        if(!($remote = esc_attr( get_option('m_remote_media_remote_url') ))) {
+            return;
+        }
+        
+        $remote = untrailingslashit($remote);
+        $remote .= $request;
+        
+		$home_root = self::get_home_root();     
+        
+        $local = untrailingslashit(ABSPATH);
+        $local .= $request;
+        
+        if(file_exists($local) and get_option('m_remote_media_ignore_local') != 'on') {     
+            $mime = mime_content_type($local);
+            $content = file_get_contents($local);
+        } else {
+            $upload_dir = wp_upload_dir(null, false);
+        
+            $cache_folder = sprintf('%s/_remote_media_cache', $upload_dir['basedir']);
+            $cache_file = sprintf('%s/%s', $cache_folder, sha1($request));
+        
+            if(file_exists($cache_file)) {
+                $file = unserialize(file_get_contents($cache_file));
+                $mime = $file['mime'];
+                $content = $file['content'];
+            } else {
+                mkdir($cache_folder, 0750, true);
+
+                $ch = curl_init($remote);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                if(curl_exec($ch) === false) {
+                    header("HTTP/1.0 404 Not Found");
+                } else {
+                    $header  = curl_getinfo( $ch );
+                    $content = curl_exec( $ch );
+                    $mime = $header['content_type'];
+
+                    file_put_contents(sprintf('%s/%s', $cache_folder, sha1($request)), serialize(array(
+                        'mime' => $header['content_type'],
+                        'content' => $content
+                    )));
+                }
+            }
+        }
+        
+        header(sprintf('Content-Type: %s;', $mime));
+
+        echo $content;
+        exit;
+    } 
+
+}
+
+function m_remote_media() {
+    global $m_remote_media;
+
+    if( !isset($m_remote_media) ) {
+        $m_remote_media = new m_remote_media();
+        $m_remote_media->initialize();
+    }
+
+    return $m_remote_media;        
+}
+
+register_activation_hook( __FILE__, array('m_remote_media', 'set_version') );
+register_activation_hook( __FILE__, array('m_remote_media', 'add_htaccess_rules') );
+register_deactivation_hook( __FILE__, array('m_remote_media', 'remove_htaccess_rules') );
+
+m_remote_media();

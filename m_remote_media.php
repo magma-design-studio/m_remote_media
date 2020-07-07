@@ -3,7 +3,7 @@
 Plugin Name:  Remote Media
 Plugin URI:   https://magmadesignstudio.de
 Description:  This plugin loads uploads from a remote server (such as a production environment) on demand, so you do not necessarily have to load all the files of the uploads folder.
-Version:      0.0.1
+Version:      0.0.2
 Author:       magma, Sebastian Tiede
 Author URI:   https://magmadesignstudio.de
 */
@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) or die( 'No script kiddies please!' );
 
 define( 'PLUGIN_NAME_SLUG', 'm_remote_media' );
 
-define( 'MREMMED_VERSION', '0.0.1' );
+define( 'MREMMED_VERSION', '0.0.2' );
 define( 'MREMMED__MINIMUM_WP_VERSION', '4.0' );
 define( 'MREMMED__PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MREMMED__PLUGIN_DIR_URL', plugin_dir_url( __FILE__ ) );
@@ -23,6 +23,8 @@ class m_remote_media {
         add_action('init', array($this, 'media_content'));
         
         add_action( 'admin_menu', array($this, 'admin_options' ));
+        
+        add_action( 'm_remote_media/load_attachment', array($this, '_action_load_attachment' ));
     }
     
     public static function set_version() {
@@ -47,9 +49,7 @@ class m_remote_media {
         register_setting( 'm_remote_media_settings_basics', 'm_remote_media_ignore_local' );
     }
     
-    function admin_options_page() {
-        
-    
+    function admin_options_page() {    
         ?>
         <div class="wrap">
             <h1>Remote Media Settings</h1>
@@ -138,24 +138,43 @@ class m_remote_media {
         file_put_contents($htaccess_file, $htaccess_content);
     }
     
+    function convert_local_to_remote($local) {
+        if(!($remote = esc_attr( get_option('m_remote_media_remote_url') ))) {
+            return false;
+        }
+        $local = $this->convert_to_path($local);
+        
+        $remote = untrailingslashit($remote);
+        $remote .= $local;    
+    
+        return $remote;
+    }
+    
+    function convert_to_path($url) {
+        $path = preg_replace(sprintf('/^%s/', preg_quote(untrailingslashit(ABSPATH), '/')), null, $url);
+        $path = preg_replace(sprintf('/^%s/', preg_quote(untrailingslashit(get_bloginfo('url')), '/')), null, $path);
+        if($remote = esc_attr( get_option('m_remote_media_remote_url') )) {
+            $path = preg_replace(sprintf('/^%s/', preg_quote(untrailingslashit($remote), '/')), null, $path);
+        }
+        
+        return $path;
+    }
     
     function media_content() {
         if(empty($_GET['m_remote_media'])) {
             return;
         }
+        
         $request = $_SERVER['REQUEST_URI'];
+        $local = untrailingslashit(ABSPATH);
+        $local .= $request;        
 
-        if(!($remote = esc_attr( get_option('m_remote_media_remote_url') ))) {
+        if(!($remote = $this->convert_local_to_remote($local))) {
             return;
         }
         
-        $remote = untrailingslashit($remote);
-        $remote .= $request;
-        
 		$home_root = self::get_home_root();     
-        
-        $local = untrailingslashit(ABSPATH);
-        $local .= $request;
+
         
         if(file_exists($local) and get_option('m_remote_media_ignore_local') != 'on') {     
             $mime = mime_content_type($local);
@@ -171,30 +190,72 @@ class m_remote_media {
                 $mime = $file['mime'];
                 $content = $file['content'];
             } else {
-                mkdir($cache_folder, 0750, true);
+                @mkdir($cache_folder, 0750, true);
 
-                $ch = curl_init($remote);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                if(curl_exec($ch) === false) {
-                    header("HTTP/1.0 404 Not Found");
+                if($file_array = $this->get_file($remote)) {
+                    file_put_contents(sprintf('%s/%s', $cache_folder, sha1($request)), serialize($file_array));     
+                    $mime = $file_array['content_type'];           
+                    $content = $file_array['content'];           
                 } else {
-                    $header  = curl_getinfo( $ch );
-                    $content = curl_exec( $ch );
-                    $mime = $header['content_type'];
-
-                    file_put_contents(sprintf('%s/%s', $cache_folder, sha1($request)), serialize(array(
-                        'mime' => $header['content_type'],
-                        'content' => $content
-                    )));
+                    header("HTTP/1.0 404 Not Found");
+                    die('Not found!');
                 }
             }
         }
         
         header(sprintf('Content-Type: %s;', $mime));
 
-        echo $content;
-        exit;
+        die($content);
     } 
+    
+    function get_file($remote) {
+        $ch = curl_init($remote);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+        if(curl_exec($ch) === false) {
+            return false;
+        } else {
+            $header  = curl_getinfo( $ch );
+
+            return array(
+                'mime' => $header['content_type'],
+                'content' => curl_exec( $ch )
+            );
+        }    
+    }
+    
+    function _action_load_attachment($local) {
+        
+        
+        if(!($remote = $this->convert_local_to_remote($local))) {
+            return false;
+        }
+        
+
+        $path = $this->convert_to_path($local);
+        
+        $dir = dirname($path);
+        $basename = basename($path);
+        		      
+        		      
+        $local_dir = untrailingslashit(ABSPATH) . $dir;
+        $local_file = sprintf('%s/%s', untrailingslashit($local_dir), $basename);
+        
+        
+        if(file_exists($local_file)) {
+            return true;
+        }
+           
+                
+        if(file_exists($local_dir) or @mkdir($local_dir)) {        
+            if($file = $this->get_file($remote)) {
+                file_put_contents($local_file, $file['content']);
+                return true;
+            }
+        }
+                
+        return false;
+    }
 
 }
 

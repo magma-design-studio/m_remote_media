@@ -41,7 +41,6 @@ class m_remote_media {
         );    
         
         add_action( 'admin_init', array($this, 'register_m_remote_media_settings') );
-        
     }
     
     function register_m_remote_media_settings() {

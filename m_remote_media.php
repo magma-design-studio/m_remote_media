@@ -18,7 +18,11 @@ define( 'MREMMED__PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MREMMED__PLUGIN_DIR_URL', plugin_dir_url( __FILE__ ) );
 
 class m_remote_media {
-    function initialize() {        
+    function initialize() {  
+        if(isset($_GET['action']) and $_GET['action'] == 'upgrade') {
+            return;
+        }
+          
         add_action('generate_rewrite_rules', array($this, 'add_htaccess_rules'));
         add_action('init', array($this, 'media_content'));
         
@@ -93,6 +97,10 @@ class m_remote_media {
     }
     
     public static function add_htaccess_rules() {
+        if(!function_exists('extract_from_markers')) {
+            return;
+        }
+    
         //save_mod_rewrite_rules();
         $home_path     = ABSPATH;
         $htaccess_file = $home_path . '.htaccess';       

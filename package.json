@@ -29,7 +29,7 @@
         "git": {
             "commitMessage": "release v${version}"
         },
-        "gitlab": {
+        "github": {
             "release": true,
             "assets": [
                 "m_remote_media.zip"

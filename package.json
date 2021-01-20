@@ -1,0 +1,42 @@
+{
+  "name": "m_remote_media",
+  "version": "0.0.2",
+  "description": "This WordPress plugin loads uploads from a remote server (such as a production environment) on demand, so you do not necessarily have to load all the files of the uploads folder.",
+  "main": "m_remote_media.php",
+  "scripts": {
+        "release": "release-it"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/magma-design-studio/m_remote_media.git"
+  },
+  "keywords": [
+    "wordpress",
+    "wordpress-plugin",
+    "wordpress-development",
+    "development-environment"
+  ],
+  "author": "Sebastian Tiede <info@magmadesignstudio.de>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/magma-design-studio/m_remote_media/issues"
+  },
+  "homepage": "https://github.com/magma-design-studio/m_remote_media#readme",
+    "release-it": {
+        "npm": {
+            "publish": false
+        },
+        "git": {
+            "commitMessage": "release v${version}"
+        },
+        "gitlab": {
+            "release": true,
+            "assets": [
+                "m_remote_media.zip"
+            ]
+        },
+        "hooks": {
+            "after:version:bump": "bash release.sh"
+        }
+    }
+}

@@ -10,9 +10,16 @@ Author URI:   https://magmadesignstudio.de
 
 defined( 'ABSPATH' ) or die( 'No script kiddies please!' );
 
-define( 'PLUGIN_NAME_SLUG', 'm_remote_media' );
+$pkg_file = __DIR__ . '/package.json';
+if(file_exists($pkg_file)) {
+    $pkg = json_decode(file_get_contents($pkg_file));
+} else {
+    wp_die('m_remote_media: package.json is missing!');
+}
 
-define( 'MREMMED_VERSION', '0.0.2' );
+define( 'MREMMED_PLUGIN_NAME_SLUG', $pkg->name );
+
+define( 'MREMMED_VERSION', $pkg->version );
 define( 'MREMMED__MINIMUM_WP_VERSION', '4.0' );
 define( 'MREMMED__PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MREMMED__PLUGIN_DIR_URL', plugin_dir_url( __FILE__ ) );

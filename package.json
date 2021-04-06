@@ -1,6 +1,6 @@
 {
     "name": "m_remote_media",
-    "version": "0.0.3",
+    "version": "1.0.0",
     "description": "This WordPress plugin loads uploads from a remote server (such as a production environment) on demand, so you do not necessarily have to load all the files of the uploads folder.",
     "main": "m_remote_media.php",
     "scripts": {

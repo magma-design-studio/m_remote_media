@@ -31,6 +31,7 @@
         },
         "github": {
             "release": true,
+            "skipChecks": true,
             "assets": [
                 "m_remote_media.zip"
             ]

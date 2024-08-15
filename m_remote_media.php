@@ -288,6 +288,28 @@ class m_remote_media {
 
         if(file_exists($local_dir) or @mkdir($local_dir, 0777, true)) {        
             if($file = $this->get_file($remote)) {
+                if(!preg_match('/image/', $file['mime'])) {
+                    $width = 2000;
+                    $height = 2000;
+                    
+                    $image = imagecreatetruecolor($width, $height);
+                    $color = imagecolorallocate($image, 255, 0, 0);
+                    
+                    imagefill($image, 0, 0, $color);
+
+                    if(!preg_match('/\.(jpe?g|png|gif)$/', $remote, $match)) {
+                        return false;
+                    }
+
+                    $type = str_replace('jpg', 'jpeg', $match[1]);
+                    $imageFn = "image{$type}";
+                 
+                    $imageFn($image, $local_file);
+                    
+                    imagedestroy($image);
+                    return true;
+                }
+     
                 file_put_contents($local_file, $file['content']);
                 return true;
             }
